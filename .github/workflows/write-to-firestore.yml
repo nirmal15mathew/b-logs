@@ -1,0 +1,56 @@
+name: Write to Firestore on Main Commit
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  write_to_firestore:
+    runs-on: ubuntu-latest
+
+    env:
+      FIREBASE_DATABASE_URL: "https://firestore.googleapis.com/v1/projects/build-log-c907e/databases/(default)"
+
+    steps:
+      # Checkout the repository
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # Set up Node.js (or Python, depending on your script language)
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '16'
+
+      # Install Firebase Admin SDK
+      - name: Install dependencies
+        run: npm install firebase-admin
+
+      # Run the script to write to Firestore
+      - name: Write to Firestore
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          echo "${FIREBASE_SERVICE_ACCOUNT}" > service-account.json
+          node <<EOF
+          const admin = require('firebase-admin');
+          const serviceAccount = require('./service-account.json');
+
+          admin.initializeApp({
+            credential: admin.credential.cert(serviceAccount),
+            databaseURL: process.env.FIREBASE_DATABASE_URL
+          });
+
+          const db = admin.firestore();
+          db.collection('commits').add({
+            message: 'New commit to main branch',
+            timestamp: new Date().toISOString()
+          }).then(() => {
+            console.log('Document successfully written!');
+          }).catch((error) => {
+            console.error('Error writing document: ', error);
+            process.exit(1);
+          });
+          EOF
+
